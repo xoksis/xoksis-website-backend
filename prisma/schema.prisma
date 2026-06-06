@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MENTOR
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String
+  name             String?
+  firstName        String?
+  lastName         String?
+  country          String?
+  dob              String?
+  role             Role           @default(USER)
+  onboardingDone   Boolean        @default(false)
+  emailVerified    Boolean        @default(false)
+  authProvider     String         @default("manual") // "manual" | "google" | "both"
+  interests        String[]
+  skillLevel       String?
+  goal             String?
+  userType         String? // "learner" | "client"
+  avatar           String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  referralCode     String?        @unique
+  tokenVersion     Int            @default(0)
+  enrollments             Enrollment[]
+  subscriptions           Subscription[]
+  certificates            Certificate[]
+  notifications           Notification[]
+  feedback                Feedback[]
+  blogPosts               BlogPost[]
+  referralsReceived       Enrollment[]   @relation("ReferralsReceived")
+}
+
+model Course {
+  id               String         @id @default(uuid())
+  title            String
+  desc             String
+  tag              String
+  cat              String // "development" | "design" | "business" | "marketing"
+  level            String // "Beginner" | "Intermediate" | "Advanced"
+  price            String
+  hours            String?
+  startDate        String?
+  rating           Float          @default(0)
+  reviews          Int            @default(0)
+  image            String
+  badge            String?
+  intro            String?        @default("")
+  originalPrice    String?        @default("")
+  instructorName   String?        @default("XOKSIS Mentor Team")
+  instructorRole   String?        @default("Industry Instructor")
+  instructorBio    String?        @default("Focused on practical, project-oriented learning outcomes.")
+  instructorAvatar String?        @default("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80")
+  prerequisites    String[]
+  curriculum       Json? // Array of {title: string, subtitle: string, lessons: Array<{title: string, duration: string, kind: string}>}
+  feedback         Json? // Array of {author: string, quote: string}
+  enrollments      Enrollment[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Enrollment {
+  id                String   @id @default(uuid())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  course            Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  courseId          String
+  // Application details
+  fullName          String?
+  email             String?
+  contactNumber     String?
+  gender            String?
+  genderOther       String?
+  isHafizQuran      Boolean  @default(false)
+  isOrphan          Boolean  @default(false)
+  disability        String?
+  referralDetails   String?
+  referralCodeUsed  String?
+  referrer          User?    @relation("ReferralsReceived", fields: [referrerId], references: [id], onDelete: SetNull)
+  referrerId        String?
+  // Application status
+  applicationStatus String   @default("APPROVED") // "PENDING" | "APPROVED" | "REJECTED"
+  // Access & progress
+  accessStatus      String   @default("active")  // "active" | "revoked"
+  courseCompleted   Boolean  @default(false)
+  // Fee
+  feeTier           String   @default("free")    // "free" | "standard"
+  fee               Int      @default(2500)
+  feeStatus         String   @default("unpaid")  // "unpaid" | "partial" | "paid"
+  feeNotes          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([referrerId])
+  @@unique([userId, courseId])
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  category  String   @default("general")
+  subject   String
+  body      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailCampaign {
+  id            String                   @id @default(uuid())
+  subject       String
+  body          String
+  targetType    String
+  targetFilters Json?
+  totalCount    Int                      @default(0)
+  sentCount     Int                      @default(0)
+  failedCount   Int                      @default(0)
+  skippedCount  Int                      @default(0)
+  createdById   String?
+  createdByEmail String?
+  recipients    EmailCampaignRecipient[]
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+}
+
+model EmailCampaignRecipient {
+  id              String        @id @default(uuid())
+  campaign        EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId      String
+  enrollmentId    String?
+  email           String
+  fullName        String?
+  status          String        @default("pending")
+  error           String?
+  resendId        String?
+  renderedSubject String
+  renderedBody    String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([email])
+}
+
+model OtpRecord {
+  id        String   @id @default(uuid())
+  email     String
+  otpHash   String
+  type      String   // "signup" | "forgot_password"
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+}
+
+model Product {
+  id               String   @id @default(uuid())
+  slug             String   @unique
+  type             String // "Software" | "Mobile App"
+  name             String
+  shortDescription String
+  fullDescription  String
+  coverImage       String
+  platform         String
+  version          String
+  downloadLabel    String
+  features         String[]
+  screenshots      String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model BlogPost {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  category    String // "Engineering" | "Design" | "Growth" | "Learning"
+  title       String
+  excerpt     String
+  coverImage  String
+  readTime    String
+  publishedAt String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId    String
+  sections    Json // Array of {heading: string, body: string}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([authorId])
+}
+
+model Service {
+  id               String   @id @default(uuid())
+  slug             String   @unique
+  title            String
+  shortTitle       String
+  shortDescription String
+  longDescription  String
+  image            String
+  accent           String
+  icon             String // "app" | "web" | "ai"
+  highlights       String[]
+  process          String[]
+  technologies     String[]
+  team             Json // Array of {name: string, role: string, avatar: string}
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  plan      String
+  status    String // "active" | "expired"
+  startDate DateTime @default(now())
+  endDate   DateTime
+
+  @@index([userId])
+}
+
+model Certificate {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String
+  issuedAt  DateTime @default(now())
+  url       String
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  content   String
+  rating    Int
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SiteContent {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  content   Json
+  updatedAt DateTime @updatedAt
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  image     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FAQ {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JourneyStep {
+  id        String   @id @default(uuid())
+  number    String
+  title     String
+  subtitle  String
+  description String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
