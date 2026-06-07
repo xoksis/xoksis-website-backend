@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "prisma generate && prisma db push",
   "builds": [
     {
       "src": "api/index.ts",
