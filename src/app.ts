@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
+import prisma from "./config/prisma";
 import authRoutes from "./routes/authRoutes";
 import courseRoutes from "./routes/courseRoutes";
 import productRoutes from "./routes/productRoutes";
@@ -93,6 +94,19 @@ app.use("/api/enrollments", enrollmentRoutes);
 // Basic Route
 app.get("/", (req, res) => {
   res.json({ message: "XOKSIS API is running..." });
+});
+
+// Health check — tests live DB connection
+app.get("/api/health", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log("[HEALTH] DB connected");
+    res.json({ status: "ok", database: "connected", env: process.env.NODE_ENV });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[HEALTH] DB FAILED:", message);
+    res.status(500).json({ status: "error", database: "failed", error: message });
+  }
 });
 
 // Error handling middleware — hides internals in production
