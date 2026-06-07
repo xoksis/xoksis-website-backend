@@ -39,8 +39,22 @@ const app = express();
 app.set("trust proxy", 1);
 
 // ── Security middleware ──────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://xoksis.com",
+  "https://www.xoksis.com",
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    }
+  },
   credentials: true,
 }));
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
