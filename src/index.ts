@@ -3,6 +3,7 @@ dotenv.config();
 
 import app from "./app";
 import prisma from "./config/prisma";
+import { seedAdmin } from "./utils/seedAdmin";
 
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -11,6 +12,7 @@ async function start() {
   let dbStatus = "Connected";
   try {
     await prisma.$queryRaw`SELECT 1`;
+    await seedAdmin();
   } catch (err) {
     dbStatus = "FAILED — " + (err instanceof Error ? err.message : String(err));
   }
