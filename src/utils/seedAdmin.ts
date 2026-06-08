@@ -2,16 +2,9 @@ import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 
 export async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
+  const email = process.env.ADMIN_EMAIL || "admin@xoksis.com";
+  const password = process.env.ADMIN_PASSWORD || "Xoksis@Admin2025";
   const name = process.env.ADMIN_NAME || "XOKSIS Admin";
-
-  if (!email || !password) return;
-
-  if (password.length < 12) {
-    console.warn("  ⚠  ADMIN_PASSWORD is too short (min 12 chars) — skipping admin seed.");
-    return;
-  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
 
