@@ -17,7 +17,7 @@ function getCookieOptions(): CookieOptions {
     sameSiteEnv === "none" || sameSiteEnv === "lax" || sameSiteEnv === "strict"
       ? sameSiteEnv
       : isProd
-        ? "strict"
+        ? "none"   // cross-origin deployment: frontend and backend on different domains
         : "lax";
 
   return {
