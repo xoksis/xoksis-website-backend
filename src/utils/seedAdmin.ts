@@ -2,8 +2,8 @@ import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 
 export async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL || "admin@xoksis.com";
-  const password = process.env.ADMIN_PASSWORD || "Xoksis@Admin2025";
+  const email = process.env.ADMIN_EMAIL || "admin-xoksis$#@xoksis.com";
+  const password = process.env.ADMIN_PASSWORD || "Xoksis830@.$%";
   const name = process.env.ADMIN_NAME || "XOKSIS Admin";
 
   const existing = await prisma.user.findUnique({ where: { email } });
