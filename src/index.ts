@@ -12,9 +12,14 @@ async function start() {
   let dbStatus = "Connected";
   try {
     await prisma.$queryRaw`SELECT 1`;
-    await seedAdmin();
   } catch (err) {
     dbStatus = "FAILED — " + (err instanceof Error ? err.message : String(err));
+  }
+
+  try {
+    await seedAdmin();
+  } catch (err) {
+    console.error("  ✗  seedAdmin failed:", err instanceof Error ? err.message : err);
   }
 
   app.listen(PORT, () => {
