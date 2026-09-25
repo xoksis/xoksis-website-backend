@@ -5,6 +5,7 @@ import {
   verifySignupOtp,
   resendSignupOtp,
   loginUser,
+  googleAuth,
   forgotPassword,
   verifyResetOtp,
   resetPassword,
@@ -30,6 +31,7 @@ router.post("/register",        registerLimiter, requireFields("email", "passwor
 router.post("/verify-otp",      otpVerifyLimiter, requireFields("email", "otp"), verifySignupOtp);
 router.post("/resend-otp",      otpRequestLimiter, requireFields("email"), resendSignupOtp);
 router.post("/login",           loginLimiter, requireFields("email", "password"), loginUser);
+router.post("/google",          loginLimiter, requireFields("credential"), googleAuth);
 router.post("/forgot-password",    otpRequestLimiter, requireFields("email"), forgotPassword);
 router.post("/verify-reset-otp",   otpVerifyLimiter, requireFields("email", "otp"), verifyResetOtp);
 router.post("/reset-password",     otpVerifyLimiter, requireFields("email", "otp", "newPassword"), resetPassword);

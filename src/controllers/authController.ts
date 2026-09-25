@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 import prisma from "../config/prisma";
 import { createOtpRecord, verifyOtpRecord, peekOtpRecord } from "../utils/otp";
 import {
@@ -12,6 +13,7 @@ import { authUserResponse, clearAuthCookie, setAuthCookie } from "../utils/authT
 import { clearUserCache } from "../middleware/authMiddleware";
 
 const isDev = process.env.NODE_ENV !== "production";
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // POST /api/auth/check-email — uniform response to prevent user enumeration
 export const checkEmail = async (req: Request, res: Response) => {
@@ -112,13 +114,106 @@ export const resendSignupOtp = async (req: Request, res: Response) => {
   }
 };
 
+// POST /api/auth/google — "Continue with Google" (Google Identity Services ID token)
+export const googleAuth = async (req: Request, res: Response) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ message: "Google credential is required." });
+    }
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      return res.status(401).json({ message: "Invalid or expired Google sign-in. Please try again." });
+    }
+
+    if (!payload || !payload.sub || !payload.email) {
+      return res.status(401).json({ message: "Google did not return an account email. Please try again or use email sign-in." });
+    }
+    // Edge case: some Google-managed accounts (e.g. unverified Workspace invites)
+    // report an email that Google itself hasn't verified — refuse rather than
+    // silently trusting an unverified address as a login identity.
+    if (!payload.email_verified) {
+      return res.status(401).json({ message: "Your Google account's email isn't verified. Please verify it with Google first." });
+    }
+
+    const email = payload.email;
+    const googleId = payload.sub;
+    const displayName = payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || undefined;
+
+    let user = await prisma.user.findUnique({ where: { googleId } });
+
+    if (!user) {
+      const existingByEmail = await prisma.user.findUnique({ where: { email } });
+
+      if (existingByEmail) {
+        // Same email already registered manually — link the Google identity
+        // to that existing account rather than creating a duplicate.
+        user = await prisma.user.update({
+          where: { email },
+          data: {
+            googleId,
+            emailVerified: true,
+            authProvider: existingByEmail.password ? "both" : "google",
+            avatar: existingByEmail.avatar || payload.picture || undefined,
+          },
+        });
+      } else {
+        // Brand-new account — create it and sign the user straight in.
+        const referralCode = await generateUniqueReferralCode();
+        user = await prisma.user.create({
+          data: {
+            email,
+            googleId,
+            name: displayName,
+            avatar: payload.picture || undefined,
+            emailVerified: true,
+            authProvider: "google",
+            referralCode,
+          },
+        });
+        sendWelcomeEmail(email, displayName || "there");
+      }
+    }
+
+    setAuthCookie(res, user.id, user.tokenVersion);
+    res.json(authUserResponse(user));
+  } catch (error: any) {
+    console.error("googleAuth:", error);
+    res.status(500).json({ message: "Google sign-in failed.", ...(isDev && { error: error.message }) });
+  }
+};
+
 // POST /api/auth/login
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.password || !(await bcrypt.compare(password, user.password))) {
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (!user.password) {
+      // Account was created via Google only — no password to compare against.
+      // Send a verification OTP so the client can move straight into the
+      // "verify email, then set a password" flow instead of a dead-end error.
+      const otp = await createOtpRecord(email, "forgot_password");
+      await sendForgotPasswordOtp(email, user.name || user.firstName || "there", otp);
+      return res.status(409).json({
+        message: "This account signed up with Google. Verify your email to create a password.",
+        requiresPasswordSetup: true,
+        email,
+      });
+    }
+
+    if (!(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
@@ -196,10 +291,18 @@ export const resetPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ message: result.reason });
     }
 
+    const existing = await prisma.user.findUnique({ where: { email } });
     const hashed = await bcrypt.hash(newPassword, 10);
     const user = await prisma.user.update({
       where: { email },
-      data: { password: hashed, tokenVersion: { increment: 1 } },
+      data: {
+        password: hashed,
+        tokenVersion: { increment: 1 },
+        // A Google-only account (no password yet) reaching this endpoint
+        // directly (rather than via the login-triggered redirect) still
+        // needs its provider flipped so email/password login works after.
+        ...(existing && !existing.password && { authProvider: "both" }),
+      },
     });
 
     clearUserCache(user.id);
