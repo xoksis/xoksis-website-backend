@@ -4,11 +4,20 @@ set -u
 API=http://localhost:5001/api
 PASS=0; FAIL=0
 
-jget() { node -e "
-const o = JSON.parse(process.argv[1]);
+# The payload goes through a file, not argv: Windows caps a command line at
+# ~32k chars, so passing a large response (the audit log grows past that) made
+# node fail to start and every assertion on it read as empty.
+JGET_IN=/tmp/jget-in.json
+jget() {
+  printf '%s' "$1" > "$JGET_IN"
+  node -e "
+const fs = require('fs');
+let o;
+try { o = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); } catch { process.exit(0); }
 const v = eval(process.argv[2]);
 console.log(v === undefined || v === null ? '' : (typeof v === 'object' ? JSON.stringify(v) : v));
-" "$1" "$2" 2>/dev/null; }
+" "$JGET_IN" "$2" 2>/dev/null
+}
 
 body() { cat "$1" 2>/dev/null || echo '{}'; }
 

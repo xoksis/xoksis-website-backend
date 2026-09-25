@@ -13,6 +13,7 @@ import {
   getUserProfile,
 } from "../controllers/authController";
 import { protect } from "../middleware/authMiddleware";
+import { requireFields } from "../middleware/validateBody";
 import {
   loginLimiter,
   registerLimiter,
@@ -22,15 +23,17 @@ import {
 
 const router = express.Router();
 
-router.post("/check-email",     loginLimiter, checkEmail);
-router.post("/register",        registerLimiter, registerUser);
-router.post("/verify-otp",      otpVerifyLimiter, verifySignupOtp);
-router.post("/resend-otp",      otpRequestLimiter, resendSignupOtp);
-router.post("/login",           loginLimiter, loginUser);
-router.post("/forgot-password",    otpRequestLimiter, forgotPassword);
-router.post("/verify-reset-otp",   otpVerifyLimiter, verifyResetOtp);
-router.post("/reset-password",     otpVerifyLimiter, resetPassword);
-router.post("/set-password",    otpVerifyLimiter, setPassword);
+// Rate limiter first so malformed-request floods are throttled too, then field
+// validation so a missing field returns 400 instead of reaching Prisma.
+router.post("/check-email",     loginLimiter, requireFields("email"), checkEmail);
+router.post("/register",        registerLimiter, requireFields("email", "password"), registerUser);
+router.post("/verify-otp",      otpVerifyLimiter, requireFields("email", "otp"), verifySignupOtp);
+router.post("/resend-otp",      otpRequestLimiter, requireFields("email"), resendSignupOtp);
+router.post("/login",           loginLimiter, requireFields("email", "password"), loginUser);
+router.post("/forgot-password",    otpRequestLimiter, requireFields("email"), forgotPassword);
+router.post("/verify-reset-otp",   otpVerifyLimiter, requireFields("email", "otp"), verifyResetOtp);
+router.post("/reset-password",     otpVerifyLimiter, requireFields("email", "otp", "newPassword"), resetPassword);
+router.post("/set-password",    otpVerifyLimiter, requireFields("email", "otp", "password"), setPassword);
 router.post("/logout",          logoutUser);
 router.get("/profile",          protect, getUserProfile);
 

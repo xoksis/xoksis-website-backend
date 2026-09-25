@@ -69,6 +69,14 @@ app.use(cookieParser());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express.json({ limit: "50kb" }));
 
+// Express 5 leaves req.body undefined when a request carries no body, where
+// Express 4 set it to {}. Handlers destructure req.body, so a bodyless POST
+// would throw and surface as a 500 instead of a 400. Normalise it here.
+app.use((req, _res, next) => {
+  if (req.body == null) req.body = {};
+  next();
+});
+
 // ── Public cache middleware ──────────────────────────────────────────────────
 // Adds Cache-Control headers to GET responses on public read-only routes.
 // Browsers & CDNs cache for 60s; serve stale for up to 5 min while revalidating.

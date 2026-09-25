@@ -2,9 +2,17 @@ import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 
 export async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL || "admin-xoksis$#@xoksis.com";
-  const password = process.env.ADMIN_PASSWORD || "Xoksis830@.$%";
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
   const name = process.env.ADMIN_NAME || "XOKSIS Admin";
+
+  // No fallback credentials on purpose: a default email/password committed to
+  // this repo is a working admin login for anyone who reads it. Refuse to seed
+  // rather than create one — set ADMIN_EMAIL / ADMIN_PASSWORD instead.
+  if (!email) {
+    console.warn("  !  ADMIN_EMAIL not set — skipping admin seed.");
+    return;
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
 
@@ -15,6 +23,13 @@ export async function seedAdmin() {
       data: { role: "ADMIN", emailVerified: true, onboardingDone: true },
     });
     console.log(`  ✓  Existing user promoted to ADMIN: ${email}`);
+    return;
+  }
+
+  if (!password) {
+    console.warn(
+      `  !  No user ${email} and ADMIN_PASSWORD not set — cannot create an admin.`,
+    );
     return;
   }
 
