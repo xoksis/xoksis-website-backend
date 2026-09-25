@@ -43,6 +43,8 @@ async function start() {
     console.log(`    /api/content    CMS content`);
     console.log(`    /api/extra      FAQ & Journey steps`);
     console.log(`    /api/admin      Admin dashboard`);
+    console.log(`    /api/teacher    Teacher (LMS) workspace`);
+    console.log(`    /api/student    Student (LMS) portal`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   });
 }

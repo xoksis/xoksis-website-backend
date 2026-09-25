@@ -85,3 +85,69 @@ export const admin = (req: AuthRequest, res: Response, next: NextFunction) => {
   }
   res.status(403).json({ message: 'Not authorized as an admin' });
 };
+
+// ── teacher middleware ───────────────────────────────────────────────────────
+// Admins pass through too so they can inspect/manage teacher-owned resources.
+export const requireTeacher = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const role = req.user?.role;
+  if (role === 'MENTOR' || role === 'ADMIN') {
+    return next();
+  }
+  res.status(403).json({ message: 'Not authorized as a teacher' });
+};
+
+// ── course ownership guard ───────────────────────────────────────────────────
+// Verifies req.user is either an ADMIN or listed in CourseTeacher for :courseId.
+// Reads course id from req.params.courseId or req.params.id.
+export const teacherOwnsCourse = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const userId = req.user?.id;
+  const courseId = String(req.params.courseId || req.params.id || "");
+  if (!userId || !courseId) {
+    return res.status(400).json({ message: 'Missing user or course id' });
+  }
+  if (req.user?.role === 'ADMIN') {
+    return next();
+  }
+  try {
+    const row = await prisma.courseTeacher.findUnique({
+      where: { courseId_teacherId: { courseId, teacherId: userId } },
+      select: { id: true },
+    });
+    if (!row) {
+      return res.status(403).json({ message: 'You do not teach this course' });
+    }
+    return next();
+  } catch {
+    return res.status(500).json({ message: 'Course ownership check failed' });
+  }
+};
+
+// ── enrollment guard ─────────────────────────────────────────────────────────
+// Student-side counterpart to teacherOwnsCourse: the caller must hold an
+// approved, non-revoked enrollment for :courseId. Admins pass through so they
+// can preview what a student sees.
+export const requireEnrollment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const userId = req.user?.id;
+  const courseId = String(req.params.courseId || req.params.id || "");
+  if (!userId || !courseId) {
+    return res.status(400).json({ message: 'Missing user or course id' });
+  }
+  if (req.user?.role === 'ADMIN') {
+    return next();
+  }
+  try {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { userId_courseId: { userId, courseId } },
+      select: { applicationStatus: true, accessStatus: true },
+    });
+    if (!enrollment || enrollment.applicationStatus !== 'APPROVED') {
+      return res.status(403).json({ message: 'You are not enrolled in this course' });
+    }
+    if (enrollment.accessStatus !== 'active') {
+      return res.status(403).json({ message: 'Your access to this course has been revoked' });
+    }
+    return next();
+  } catch {
+    return res.status(500).json({ message: 'Enrollment check failed' });
+  }
+};

@@ -16,6 +16,9 @@ import contentRoutes from "./routes/contentRoutes";
 import teamRoutes from "./routes/teamRoutes";
 import extraRoutes from "./routes/extraRoutes";
 import enrollmentRoutes from "./routes/enrollmentRoutes";
+import teacherRoutes from "./routes/teacherRoutes";
+import studentRoutes from "./routes/studentRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
 
 // dotenv is loaded by index.ts BEFORE any imports — do NOT call it again here.
 
@@ -42,10 +45,13 @@ app.set("trust proxy", 1);
 // ── Security middleware ──────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
+  "http://localhost:5174", // LMS app (separate frontend)
   "http://localhost:3000",
   "https://xoksis.com",
   "https://www.xoksis.com",
+  "https://lms.xoksis.com",
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ...(process.env.LMS_URL ? [process.env.LMS_URL] : []),
 ];
 
 app.use(cors({
@@ -90,6 +96,9 @@ app.use("/api/content", publicCache, contentRoutes);
 app.use("/api/team",    publicCache, teamRoutes);
 app.use("/api/extra",   publicCache, extraRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
+app.use("/api/teacher", teacherRoutes);
+app.use("/api/student", studentRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Basic Route
 app.get("/", (req, res) => {

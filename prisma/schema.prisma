@@ -32,6 +32,7 @@ model User {
   goal             String?
   userType         String? // "learner" | "client"
   avatar           String?
+  signature        String? // teacher profile signature, printed on certificates
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   referralCode     String?        @unique
@@ -42,7 +43,21 @@ model User {
   notifications           Notification[]
   feedback                Feedback[]
   blogPosts               BlogPost[]
-  referralsReceived       Enrollment[]   @relation("ReferralsReceived")
+  referralsReceived       Enrollment[]     @relation("ReferralsReceived")
+  // LMS relations
+  coursesTaught           CourseTeacher[]
+  materialsUploaded       Material[]       @relation("MaterialUploader")
+  announcementsAuthored   Announcement[]   @relation("AnnouncementAuthor")
+  assignmentsAuthored     Assignment[]     @relation("AssignmentAuthor")
+  submissions             Submission[]     @relation("SubmissionStudent")
+  submissionsGraded       Submission[]     @relation("SubmissionGrader")
+  quizzesAuthored         Quiz[]           @relation("QuizAuthor")
+  quizAttempts            QuizAttempt[]    @relation("QuizAttemptStudent")
+  quizAttemptsGraded      QuizAttempt[]    @relation("QuizAttemptGrader")
+  meetingsHosted          Meeting[]        @relation("MeetingHost")
+  attendance              AttendanceRecord[] @relation("AttendanceStudent")
+  lessonCompletions       LessonCompletion[] @relation("LessonCompletionStudent")
+  auditLogs               AuditLog[]       @relation("AuditActor")
 }
 
 model Course {
@@ -69,6 +84,15 @@ model Course {
   curriculum       Json? // Array of {title: string, subtitle: string, lessons: Array<{title: string, duration: string, kind: string}>}
   feedback         Json? // Array of {author: string, quote: string}
   enrollments      Enrollment[]
+  // LMS relations
+  teachers         CourseTeacher[]
+  modules          Module[]
+  materials        Material[]
+  announcements    Announcement[]
+  assignments      Assignment[]
+  quizzes          Quiz[]
+  meetings         Meeting[]
+  certificates     Certificate[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
@@ -241,11 +265,14 @@ model Certificate {
   id        String   @id @default(uuid())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  courseId  String?
   title     String
   issuedAt  DateTime @default(now())
   url       String
 
   @@index([userId])
+  @@index([courseId])
 }
 
 model Notification {
@@ -306,4 +333,290 @@ model JourneyStep {
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LMS — foundation models (slice #1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Many-to-many between Course and User(MENTOR). "role" distinguishes lead vs assistant.
+model CourseTeacher {
+  id         String   @id @default(uuid())
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String
+  teacher    User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId  String
+  role       String   @default("LEAD") // "LEAD" | "ASSISTANT"
+  assignedAt DateTime @default(now())
+
+  @@unique([courseId, teacherId])
+  @@index([teacherId])
+  @@index([courseId])
+}
+
+// A course section (e.g. "Week 1", "Module 2").
+model Module {
+  id        String   @id @default(uuid())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId  String
+  title     String
+  summary   String?
+  order     Int      @default(0)
+  lessons   Lesson[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+// A single unit inside a Module.
+model Lesson {
+  id              String   @id @default(uuid())
+  module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  moduleId        String
+  title           String
+  type            String   @default("READING") // "VIDEO" | "READING" | "LINK" | "FILE"
+  contentUrl      String?  // for VIDEO / LINK / FILE
+  contentText     String?  // for READING (markdown/html)
+  durationMinutes Int?
+  order           Int      @default(0)
+  completions     LessonCompletion[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([moduleId])
+}
+
+// Free-standing resources attached to a course (guides, PDFs, external links).
+// Shows in the student timeline. Different from Lesson: not part of a module.
+model Material {
+  id          String   @id @default(uuid())
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  title       String
+  description String?
+  type        String   @default("LINK") // "LINK" | "FILE" | "PDF" | "VIDEO"
+  url         String
+  uploadedBy  User?    @relation("MaterialUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([courseId])
+  @@index([uploadedById])
+}
+
+// Course-scoped or platform-wide announcement.
+// courseId = null means platform-wide (admin only).
+model Announcement {
+  id        String   @id @default(uuid())
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId  String?
+  author    User     @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+  title     String
+  body      String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+  @@index([authorId])
+}
+
+// A graded task inside a course. Teachers author these; students submit against them.
+model Assignment {
+  id           String       @id @default(uuid())
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId     String
+  title        String
+  instructions String?
+  dueAt        DateTime?
+  maxPoints    Int          @default(100)
+  allowLate    Boolean      @default(true)
+  published    Boolean      @default(true)
+  createdBy    User?        @relation("AssignmentAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById  String?
+  submissions  Submission[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([courseId])
+  @@index([createdById])
+}
+
+// One student's answer to one assignment. isLate is decided server-side from
+// the assignment deadline, never trusted from the client.
+model Submission {
+  id           String     @id @default(uuid())
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  student      User       @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  studentId    String
+  text         String?
+  url          String?
+  isLate       Boolean    @default(false)
+  submittedAt  DateTime   @default(now())
+  grade        Int?
+  feedback     String?
+  gradedAt     DateTime?
+  gradedBy     User?      @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+  gradedById   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([assignmentId, studentId])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([gradedById])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Quizzes
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A timed, auto-scored assessment built from QuizQuestions. Each student run
+// through it is a QuizAttempt. correctAnswer is never serialised to students.
+model Quiz {
+  id               String         @id @default(uuid())
+  course           Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId         String
+  title            String
+  description      String?
+  timeLimitMin     Int? // null = untimed
+  attemptsAllowed  Int            @default(1)
+  dueAt            DateTime?
+  shuffleQuestions Boolean        @default(false)
+  published        Boolean        @default(true)
+  createdBy        User?          @relation("QuizAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById      String?
+  questions        QuizQuestion[]
+  attempts         QuizAttempt[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([courseId])
+  @@index([createdById])
+}
+
+// type: "MCQ" | "TRUE_FALSE" | "SHORT" | "LONG".
+// MCQ / TRUE_FALSE / SHORT are auto-scored against correctAnswer; LONG is
+// graded manually by a teacher.
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId        String
+  prompt        String
+  type          String   @default("MCQ")
+  options       String[]
+  correctAnswer String?
+  points        Int      @default(1)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([quizId])
+}
+
+// answers is { [questionId]: string | string[] }. autoScore is computed on
+// submit; finalScore is set once manual grading finishes (or equal to
+// autoScore when the quiz has no LONG questions).
+model QuizAttempt {
+  id          String   @id @default(uuid())
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId      String
+  student     User     @relation("QuizAttemptStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  studentId   String
+  startedAt   DateTime @default(now())
+  submittedAt DateTime?
+  answers     Json?
+  autoScore   Int?
+  manualScore Int?
+  finalScore  Int?
+  maxScore    Int      @default(0)
+  feedback    String?
+  gradedBy    User?    @relation("QuizAttemptGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+  gradedById  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([quizId])
+  @@index([studentId])
+  @@index([gradedById])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Meetings & attendance
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A live class a teacher schedules. Students open /api/meetings/:id/join,
+// which records attendance and then 302s to link.
+model Meeting {
+  id          String             @id @default(uuid())
+  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  title       String
+  description String?
+  link        String
+  scheduledAt DateTime
+  durationMin Int                @default(60)
+  createdBy   User?              @relation("MeetingHost", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  attendance  AttendanceRecord[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([courseId])
+  @@index([createdById])
+}
+
+// One row per (meeting, student). source is "LINK_CLICK" when the student
+// opened the join redirect, or "MANUAL" when a teacher marked them by hand.
+// ipHash lets a teacher spot the same device checking in several students.
+model AttendanceRecord {
+  id        String   @id @default(uuid())
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meetingId String
+  student   User     @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String
+  joinedAt  DateTime @default(now())
+  source    String   @default("LINK_CLICK")
+  ipHash    String?
+  createdAt DateTime @default(now())
+
+  @@unique([meetingId, studentId])
+  @@index([studentId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Progress & audit
+// ═══════════════════════════════════════════════════════════════════════════
+
+model LessonCompletion {
+  id          String   @id @default(uuid())
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonId    String
+  student     User     @relation("LessonCompletionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  studentId   String
+  completedAt DateTime @default(now())
+
+  @@unique([lessonId, studentId])
+  @@index([studentId])
+}
+
+// Append-only record of privileged LMS mutations (teacher assignment, fee
+// changes, bulk enroll, impersonation). Never updated or deleted by the app.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }

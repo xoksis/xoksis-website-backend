@@ -70,3 +70,26 @@ export const passwordChangeLimiter = createRateLimiter({
     return userId ? `user:${userId}` : clientIp(req);
   },
 });
+
+/** Per student — stops a scripted client from hammering the submit endpoint. */
+export const submissionLimiter = createRateLimiter({
+  storeKey: "submission",
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many submission attempts. Please try again later.",
+  keyGenerator: (req) => {
+    const userId = (req as Request & { user?: { id?: string } }).user?.id;
+    return userId ? `user:${userId}` : clientIp(req);
+  },
+});
+
+export const quizAttemptLimiter = createRateLimiter({
+  storeKey: "quiz-attempt",
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Too many quiz attempts. Please try again later.",
+  keyGenerator: (req) => {
+    const userId = (req as Request & { user?: { id?: string } }).user?.id;
+    return userId ? `user:${userId}` : clientIp(req);
+  },
+});
