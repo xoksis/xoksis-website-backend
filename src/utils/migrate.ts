@@ -202,6 +202,14 @@ const MIGRATIONS: { name: string; sql: string }[] = [
         NOT VALID;
     `,
   },
+  {
+    name: "002_google_auth",
+    sql: `
+      ALTER TABLE "User" ALTER COLUMN "password" DROP NOT NULL;
+      ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "googleId" TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS "User_googleId_key" ON "User"("googleId");
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {
