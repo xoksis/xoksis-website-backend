@@ -5,6 +5,7 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
 import prisma from "./config/prisma";
+import { seedAdmin } from "./utils/seedAdmin";
 import authRoutes from "./routes/authRoutes";
 import courseRoutes from "./routes/courseRoutes";
 import productRoutes from "./routes/productRoutes";
@@ -116,6 +117,9 @@ app.get("/", (req, res) => {
 // Health check — tests live DB connection
 app.get("/api/health", async (req, res) => {
   try {
+    await seedAdmin().catch((seedErr) => {
+      console.error("[HEALTH] seedAdmin FAILED:", seedErr instanceof Error ? seedErr.message : String(seedErr));
+    });
     await prisma.$queryRaw`SELECT 1`;
     console.log("[HEALTH] DB connected");
     res.json({ status: "ok", database: "connected", env: process.env.NODE_ENV });
