@@ -1,6 +1,7 @@
 import app from "../src/app";
 import prisma from "../src/config/prisma";
 import { runMigrations } from "../src/utils/migrate";
+import { seedAdmin } from "../src/utils/seedAdmin";
 
 // Runs on cold start — visible in Vercel function logs
 runMigrations().catch((err: Error) => console.error("[MIGRATE] Fatal:", err.message));
@@ -8,5 +9,7 @@ runMigrations().catch((err: Error) => console.error("[MIGRATE] Fatal:", err.mess
 prisma.$queryRaw`SELECT 1`
   .then(() => console.log("[DB] Connected to database successfully"))
   .catch((err: Error) => console.error("[DB] Connection FAILED:", err.message));
+
+seedAdmin().catch((err: Error) => console.error("[SEED] Fatal:", err.message));
 
 export default app as any;
