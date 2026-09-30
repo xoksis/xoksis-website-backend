@@ -3,6 +3,7 @@ import {
   getStats,
   getAllUsers,
   updateUserRole,
+  resetUserPassword,
   deleteUser,
   assignCourseTeacher,
   removeCourseTeacher,
@@ -34,6 +35,7 @@ const router = express.Router();
 router.get('/stats', protect, admin, getStats);
 router.get('/users', protect, admin, getAllUsers);
 router.put('/users/:id/role', protect, admin, updateUserRole);
+router.put('/users/:id/password', protect, admin, resetUserPassword);
 router.delete('/users/:id', protect, admin, deleteUser);
 
 // LMS: course ↔ teacher assignments

@@ -2,6 +2,7 @@ import prisma from "../config/prisma";
 
 export type AuditAction =
   | "user.role.change"
+  | "user.password.reset"
   | "course.teacher.assign"
   | "course.teacher.remove"
   | "enrollment.bulkAssign"

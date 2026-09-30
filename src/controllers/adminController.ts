@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 import { clearUserCache } from "../middleware/authMiddleware";
 import { recordAudit } from "../utils/auditLog";
@@ -65,6 +66,32 @@ export const updateUserRole = async (req: Request, res: Response) => {
     res.json(user);
   } catch (error: any) {
     res.status(500).json({ message: "Error updating user role", ...(isDev && { error: error.message }) });
+  }
+};
+
+// Support/admin action: reset a user's password directly (e.g. they're
+// locked out and can't receive the forgot-password OTP email). Bumps
+// tokenVersion so any of their existing sessions are invalidated.
+export const resetUserPassword = async (req: Request, res: Response) => {
+  const { password } = req.body;
+  const userId = String(req.params.id);
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed, tokenVersion: { increment: 1 } },
+      select: { id: true, email: true },
+    });
+    clearUserCache(userId);
+    recordAudit((req as Request & { user?: { id?: string } }).user?.id, "user.password.reset", "User", userId, {
+      email: user.email,
+    });
+    res.json({ message: "Password reset successfully." });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error resetting password", ...(isDev && { error: error.message }) });
   }
 };
 
